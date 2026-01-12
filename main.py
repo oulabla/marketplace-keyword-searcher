@@ -96,29 +96,6 @@ def print_results(results):
     if len(results) > 50:
         print(f"...и ещё {len(results) - 50} результатов в файле bitrix_vk_search_results.json")
 
-# ────────────────────────────────────────────────
-# Парсинг даты из аргумента командной строки
-# ────────────────────────────────────────────────
-
-def parse_start_date():
-    if len(sys.argv) < 2:
-        return None
-
-    raw = sys.argv[1].strip()
-
-    for fmt in ["%Y-%m-%d", "%d.%m.%Y", "%d.%m.%y"]:
-        try:
-            dt = datetime.strptime(raw, fmt)
-            if dt.year < 100:  # двухзначный год → считаем 20xx
-                dt = dt.replace(year=dt.year + 2000)
-            return int(dt.timestamp())
-        except ValueError:
-            continue
-
-    print(f"Не удалось распознать дату: {raw}")
-    print("Примеры:  2025-06-01    или    01.06.2025    или    1.6.25")
-    sys.exit(1)
-
 if __name__ == "__main__":
     token = get_token()
     vk_session = vk_api.VkApi(token=token)
