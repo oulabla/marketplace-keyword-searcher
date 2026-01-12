@@ -1,3 +1,23 @@
+# Инструкция с нуля для Windows
+Устанавливем питон https://www.python.org/downloads/release/python-3142/
+
+Устанавливем гит https://git-scm.com/install/windows
+# Заходим в папку где будет проект там делаем
+git clone https://github.com/oulabla/marketplace-keyword-searcher
+
+cd marketplace-keyword-searcher
+
+python -m venv venv
+
+venv\Scripts\activate
+
+pip install -r requirements.txt
+
+python main.py # он попросит токен для ВК надо отдать текст из файла vk_token который в телеге
+ 
+--------------------------------
+
+
 # VK Bitrix / Bitrix24 Search
 
 Скрипт ищет упоминания слов «битрикс», «bitrix», «битрикс24», «б24» и их вариаций  
