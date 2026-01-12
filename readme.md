@@ -3,6 +3,7 @@
 
 Устанавливем гит https://git-scm.com/install/windows
 # Заходим в папку где будет проект там делаем
+```bash
 git clone https://github.com/oulabla/marketplace-keyword-searcher
 
 cd marketplace-keyword-searcher
@@ -14,13 +15,13 @@ venv\Scripts\activate
 pip install -r requirements.txt
 
 python main.py # он попросит токен для ВК надо отдать текст из файла vk_token который в телеге
-
+````
 # Для повторного запуска заходим в папку .../marketplace-keyword-searcher
-
+```bash
 venv\Scripts\activate
 
 python main.py
-
+```
 --------------------------------
 
 
