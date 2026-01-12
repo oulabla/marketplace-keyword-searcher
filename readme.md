@@ -14,7 +14,12 @@ venv\Scripts\activate
 pip install -r requirements.txt
 
 python main.py # он попросит токен для ВК надо отдать текст из файла vk_token который в телеге
- 
+
+# Для повторного запуска заходим в папку .../marketplace-keyword-searcher
+
+venv\Scripts\activate
+python main.py
+
 --------------------------------
 
 
