@@ -3,19 +3,24 @@ from vk_api.exceptions import ApiError
 import time
 import json
 import os
+from datetime import datetime
+import argparse
+import sys
+
 
 # Токен с правами: groups, wall, offline
 TOKEN_FILE = "vk_token.txt"
-MAX_GROUPS = 100
-POSTS_PER_GROUPS = 100
-KEYWORDS = ['битрикс', 'bitrix', '1с-битрикс', '1c-bitrix', 'битрикс24', 'bitrix24', 'б24']
+MAX_GROUPS = 2
+POSTS_PER_GROUPS = 1
+# KEYWORDS = ['битрикс', 'bitrix', '1с-битрикс', '1c-bitrix', 'битрикс24', 'bitrix24', 'б24']
 
-def get_token():
+def get_token(show_text=True):
     if os.path.exists(TOKEN_FILE):
         with open(TOKEN_FILE, "r", encoding="utf-8") as f:
             token = f.read().strip()
         if token:
-            print(f"Токен загружен из файла {TOKEN_FILE}")
+            if show_text:
+                print(f"Токен загружен из файла {TOKEN_FILE}")
             return token
 
     token = input("Введите токен ВКонтакте: ").strip()
@@ -31,8 +36,7 @@ def get_token():
 
     return token
 
-
-def search_groups(query, count=100):
+def search_groups(vk, query, count=100):
     """Поиск сообществ по ключевому слову"""
     try:
         groups = vk.groups.search(q=query, count=count, sort=6)  # sort=6 по релевантности
@@ -42,7 +46,7 @@ def search_groups(query, count=100):
         return []
 
 
-def search_in_group_wall(group_id, query, count=100):
+def search_in_group_wall(vk, group_id, query, count=100):
     """Поиск постов в стене сообщества"""
     found = []
     try:
@@ -63,20 +67,25 @@ def search_in_group_wall(group_id, query, count=100):
     return found
 
 
-def global_search_in_communities(keywords, max_groups=MAX_GROUPS, posts_per_group=POSTS_PER_GROUPS):
+def global_search_in_communities(vk, keywords, max_groups=MAX_GROUPS, posts_per_group=POSTS_PER_GROUPS, show_text=True):
     all_found = []
 
     for kw in keywords:
-        print(f"\nПоиск сообществ по '{kw}'...")
-        group_ids = search_groups(kw, count=max_groups)
-        print(f"Найдено сообществ: {len(group_ids)}")
+        if show_text:
+            print(f"\nПоиск сообществ по '{kw}'...")
+        group_ids = search_groups(vk, kw, count=max_groups)
+        if show_text:
+            print(f"Найдено сообществ: {len(group_ids)}")
 
         for gid in group_ids:
-            print(f"  Проверяю группу {gid}...")
-            results = search_in_group_wall(gid, kw, count=posts_per_group)
+            if show_text:
+                print(f"  Проверяю группу {gid}...")
+            results = search_in_group_wall(vk, gid, kw, count=posts_per_group)
             if results:
                 all_found.extend(results)
             time.sleep(0.35)  # лимит API
+
+    all_found.sort(key=lambda p: datetime.strptime(p["date"], "%d.%m.%Y %H:%M"), reverse=True)
 
     # Сохраняем в файл для удобства
     with open('bitrix_vk_search_results.json', 'w', encoding='utf-8') as f:
@@ -85,21 +94,117 @@ def global_search_in_communities(keywords, max_groups=MAX_GROUPS, posts_per_grou
     return all_found
 
 
-def print_results(results):
-    print(f"\n{'=' * 80}")
-    print(f"Всего найдено постов: {len(results)}")
-    for r in results[:50]:  # Показываем первые 50
-        print(f"\nДата: {r['date']}")
+def print_human_readable(results):
+    if not results:
+        print("\nНичего не найдено.")
+        return
+
+    print(f"\nНайдено постов: {len(results)}")
+    print("=" * 80)
+
+    for r in results[:60]:
+        print(f"\n{r['date']}   |   {r['link']}")
         print(f"Группа: {r['group_id']}")
-        print(f"Текст: {r['text']}")
-        print(f"Ссылка: {r['link']}")
-    if len(results) > 50:
-        print(f"...и ещё {len(results) - 50} результатов в файле bitrix_vk_search_results.json")
+        print(r['short_text'])
+        print("-" * 80)
+
+    if len(results) > 60:
+        print(f"\n... ещё {len(results)-60} постов в файле vk_search_results.json")
 
 if __name__ == "__main__":
-    token = get_token()
+    parser = argparse.ArgumentParser(
+        description="Поиск постов ВКонтакте по ключевым словам в публичных сообществах",
+        add_help=False,  # отключаем стандартный --help, чтобы сделать свой красивый
+        formatter_class=argparse.RawTextHelpFormatter
+    )
+
+    parser.add_argument(
+        'keywords',
+        nargs='?',
+        default="битрикс,bitrix,1с-битрикс,битрикс24,б24",
+        help="Ключевые слова через запятую (без пробелов вокруг запятой)\nПример: фриланс,удалёнка,python"
+    )
+
+    parser.add_argument(
+        '--max-groups', '-g',
+        type=int,
+        default=3,
+        help="Макс. количество групп на одно ключевое слово (по умолчанию: 3)"
+    )
+
+    parser.add_argument(
+        '--posts-per-group', '-p',
+        type=int,
+        default=5,
+        help="Сколько последних постов проверять в каждой группе (по умолчанию: 5)"
+    )
+
+    parser.add_argument(
+        '--help', '-h',
+        action='store_true',
+        help="Показать эту справку и выйти"
+    )
+
+    parser.add_argument(
+        '-j', '--json',
+        action='store_true',
+        help="Вывести только JSON в stdout (без лишнего текста)"
+    )
+
+    args = parser.parse_args()
+
+    if args.help:
+        print("""
+    Поиск постов ВКонтакте по ключевым словам
+    -----------------------------------------
+
+    Примеры использования:
+
+      python main.py
+      python main.py "битрикс,bitrix,1с-битрикс,битрикс24,б24"
+      python main.py крипта,btc,bitcoin -g 10 -p 20
+      python main.py --help
+
+    Аргументы:
+
+      keywords              Ключевые слова через запятую (без кавычек, если нет пробелов)
+                            По умолчанию: битрикс,bitrix,1с-битрикс,битрикс24,б24
+
+      -g, --max-groups      Макс. кол-во групп на каждое слово     (по умолчанию 3)
+      -p, --posts-per-group Кол-во последних постов в группе       (по умолчанию 5)
+      -j, --json            Только JSON в вывод
+      -h, --help            Показать эту справку
+    """)
+        sys.exit(0)
+
+    # Парсим ключевые слова
+    keywords = [kw.strip() for kw in args.keywords.split(',') if kw.strip()]
+
+    if not keywords:
+        print("Ошибка: не указано ни одного ключевого слова")
+        sys.exit(1)
+
+    if args.json is False:
+        print(f"Ключевые слова: {', '.join(keywords)}")
+        print(f"Групп на слово: {args.max_groups} | Постов в группе: {args.posts_per_group}\n")
+
+    token = get_token(args.json is False)
     vk_session = vk_api.VkApi(token=token)
     vk = vk_session.get_api()
 
-    results = global_search_in_communities(KEYWORDS)
-    print_results(results)
+    results = global_search_in_communities(
+        vk,
+        keywords=keywords,
+        max_groups=args.max_groups,
+        posts_per_group=args.posts_per_group,
+        show_text=args.json is False,
+    )
+
+    if args.json:
+        # Только чистый JSON → ничего больше не печатаем
+        print(json.dumps(results, ensure_ascii=False, indent=2))
+    else:
+        # Человеческий вывод
+        print(f"Ключевые слова: {', '.join(keywords)}")
+        print(f"Групп на слово: {args.max_groups} | Постов в группе: {args.posts_per_group}\n")
+        print_human_readable(results)
