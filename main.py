@@ -46,7 +46,7 @@ def search_groups(vk, query, count=100):
         return []
 
 
-def search_in_group_wall(vk, group_id, query, count=100):
+def search_in_group_wall(vk, group_id, query, count=100, show_text=True):
     """Поиск постов в стене сообщества"""
     found = []
     try:
@@ -62,8 +62,9 @@ def search_in_group_wall(vk, group_id, query, count=100):
                 'link': f"https://vk.com/wall-{group_id}_{post['id']}"
             })
     except ApiError as e:
-        if e.code != 15:  # 15 - доступ запрещен, пропускаем закрытые группы
-            print(f"Ошибка в группе {group_id}: {e}")
+        if e.code != 15:
+            if show_text:# 15 - доступ запрещен, пропускаем закрытые группы
+                print(f"Ошибка в группе {group_id}: {e}")
     return found
 
 
@@ -80,7 +81,7 @@ def global_search_in_communities(vk, keywords, max_groups=MAX_GROUPS, posts_per_
         for gid in group_ids:
             if show_text:
                 print(f"  Проверяю группу {gid}...")
-            results = search_in_group_wall(vk, gid, kw, count=posts_per_group)
+            results = search_in_group_wall(vk, gid, kw, count=posts_per_group, show_text=show_text)
             if results:
                 all_found.extend(results)
             time.sleep(0.35)  # лимит API
@@ -105,7 +106,7 @@ def print_human_readable(results):
     for r in results[:60]:
         print(f"\n{r['date']}   |   {r['link']}")
         print(f"Группа: {r['group_id']}")
-        print(r['short_text'])
+        print(r['text'])
         print("-" * 80)
 
     if len(results) > 60:
