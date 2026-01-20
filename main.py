@@ -68,7 +68,7 @@ def search_in_group_wall(vk, group_id, query, count=100, show_text=True):
     return found
 
 
-def global_search_in_communities(vk, keywords, max_groups=MAX_GROUPS, posts_per_group=POSTS_PER_GROUPS, show_text=True):
+def global_search_in_communities(vk, keywords, max_groups=MAX_GROUPS, posts_per_group=POSTS_PER_GROUPS, show_text=True, filename='bitrix_vk_search_results.json'):
     all_found = []
 
     for kw in keywords:
@@ -89,7 +89,7 @@ def global_search_in_communities(vk, keywords, max_groups=MAX_GROUPS, posts_per_
     all_found.sort(key=lambda p: datetime.strptime(p["date"], "%d.%m.%Y %H:%M"), reverse=True)
 
     # Сохраняем в файл для удобства
-    with open('bitrix_vk_search_results.json', 'w', encoding='utf-8') as f:
+    with open(filename, 'w', encoding='utf-8') as f:
         json.dump(all_found, f, ensure_ascii=False, indent=2)
 
     return all_found
@@ -112,7 +112,7 @@ def print_human_readable(results):
     if len(results) > 60:
         print(f"\n... ещё {len(results)-60} постов в файле vk_search_results.json")
 
-if __name__ == "__main__":
+def parse_args():
     parser = argparse.ArgumentParser(
         description="Поиск постов ВКонтакте по ключевым словам в публичных сообществах",
         add_help=False,  # отключаем стандартный --help, чтобы сделать свой красивый
@@ -152,7 +152,15 @@ if __name__ == "__main__":
         help="Вывести только JSON в stdout (без лишнего текста)"
     )
 
-    args = parser.parse_args()
+    parser.add_argument(
+        '-o', '--output',
+        help="Путь к файлу для сохранения результата (UTF-8 JSON)"
+    )
+
+    return parser.parse_args()
+
+if __name__ == "__main__":
+    args = parse_args()
 
     if args.help:
         print("""
@@ -175,6 +183,7 @@ if __name__ == "__main__":
       -p, --posts-per-group Кол-во последних постов в группе       (по умолчанию 5)
       -j, --json            Только JSON в вывод
       -h, --help            Показать эту справку
+      -0, --output          Задать имя файла для сохранения
     """)
         sys.exit(0)
 
@@ -189,6 +198,10 @@ if __name__ == "__main__":
         print(f"Ключевые слова: {', '.join(keywords)}")
         print(f"Групп на слово: {args.max_groups} | Постов в группе: {args.posts_per_group}\n")
 
+    filename = 'bitrix_vk_search_results.json'
+    if len(args.output) > 0:
+        filename = args.output
+
     token = get_token(args.json is False)
     vk_session = vk_api.VkApi(token=token)
     vk = vk_session.get_api()
@@ -199,11 +212,12 @@ if __name__ == "__main__":
         max_groups=args.max_groups,
         posts_per_group=args.posts_per_group,
         show_text=args.json is False,
+        filename=filename,
     )
 
     if args.json:
         # Только чистый JSON → ничего больше не печатаем
-        print(json.dumps(results, ensure_ascii=False, indent=2))
+        json.dump(results, sys.stdout, ensure_ascii=False, indent=2)
     else:
         # Человеческий вывод
         print(f"Ключевые слова: {', '.join(keywords)}")
