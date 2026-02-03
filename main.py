@@ -6,6 +6,8 @@ import os
 from datetime import datetime
 import argparse
 import sys
+import lead
+from openai import OpenAI
 
 
 # Токен с правами: groups, wall, offline
@@ -68,7 +70,7 @@ def search_in_group_wall(vk, group_id, query, count=100, show_text=True):
     return found
 
 
-def global_search_in_communities(vk, keywords, max_groups=MAX_GROUPS, posts_per_group=POSTS_PER_GROUPS, show_text=True, filename='bitrix_vk_search_results.json'):
+def global_search_in_communities(vk, keywords, max_groups=MAX_GROUPS, posts_per_group=POSTS_PER_GROUPS, show_text=True):
     all_found = []
 
     for kw in keywords:
@@ -88,9 +90,7 @@ def global_search_in_communities(vk, keywords, max_groups=MAX_GROUPS, posts_per_
 
     all_found.sort(key=lambda p: datetime.strptime(p["date"], "%d.%m.%Y %H:%M"), reverse=True)
 
-    # Сохраняем в файл для удобства
-    with open(filename, 'w', encoding='utf-8') as f:
-        json.dump(all_found, f, ensure_ascii=False, indent=2)
+
 
     return all_found
 
@@ -103,14 +103,12 @@ def print_human_readable(results):
     print(f"\nНайдено постов: {len(results)}")
     print("=" * 80)
 
-    for r in results[:60]:
+    for r in results:
         print(f"\n{r['date']}   |   {r['link']}")
         print(f"Группа: {r['group_id']}")
         print(r['text'])
         print("-" * 80)
 
-    if len(results) > 60:
-        print(f"\n... ещё {len(results)-60} постов в файле vk_search_results.json")
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -153,6 +151,13 @@ def parse_args():
     )
 
     parser.add_argument(
+        '-a', '--ai',
+        type=int,
+        default=0,
+        help="Размер батча для обработки лидов (0 - не сохранять лиды)"
+    )
+
+    parser.add_argument(
         '-o', '--output',
         help="Путь к файлу для сохранения результата (UTF-8 JSON)"
     )
@@ -183,7 +188,8 @@ if __name__ == "__main__":
       -p, --posts-per-group Кол-во последних постов в группе       (по умолчанию 5)
       -j, --json            Только JSON в вывод
       -h, --help            Показать эту справку
-      -0, --output          Задать имя файла для сохранения
+      -o, --output          Задать имя файла для сохранения
+      -a, --ai              Фильтровать промтном через ChatGPT 
     """)
         sys.exit(0)
 
@@ -211,15 +217,46 @@ if __name__ == "__main__":
         keywords=keywords,
         max_groups=args.max_groups,
         posts_per_group=args.posts_per_group,
-        show_text=args.json is False,
-        filename=filename,
+        show_text=args.json is False
     )
 
-    if args.json:
+    if args.lead > 0:
+        print_human_readable(results)
+
+        cred = lead.load_yaml('gpt_cred.yaml')
+        api_key = cred.get('api_key') or cred.get('openai', {}).get('api_key')
+        ai_model = cred.get('model')
+        if not api_key:
+            raise ValueError("API ключ не найден")
+        if not ai_model:
+            raise ValueError("Модель не указана")
+
+        client = OpenAI(api_key=api_key)
+
+        prompt_template = lead.load_yaml('prompt.yaml').get('prompt')
+        if not prompt_template:
+            raise ValueError("Промпт не найден")
+
+        print(f"Загружено {len(results)} сообщений. Батч размером {args.lead}")
+        print(f"Модель: {ai_model}\n")
+
+        all_leads = lead.find_leads(results, client, ai_model, prompt_template, args.lead)
+
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(all_leads, f, ensure_ascii=False, indent=2)
+
+
+    elif args.json:
         # Только чистый JSON → ничего больше не печатаем
         json.dump(results, sys.stdout, ensure_ascii=False, indent=2)
+        # Сохраняем в файл для удобства
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(all_found, f, ensure_ascii=False, indent=2)
     else:
         # Человеческий вывод
         print(f"Ключевые слова: {', '.join(keywords)}")
         print(f"Групп на слово: {args.max_groups} | Постов в группе: {args.posts_per_group}\n")
         print_human_readable(results)
+        # Сохраняем в файл для удобства
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(all_found, f, ensure_ascii=False, indent=2)

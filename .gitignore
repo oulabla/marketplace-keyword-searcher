@@ -3,3 +3,8 @@
 /test2.py
 /test3.py
 .idea
+/gpt_cred.yaml
+/leads.json
+/prompt.yaml
+__pycache__
+prompt.yaml
