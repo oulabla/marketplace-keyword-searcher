@@ -84,8 +84,8 @@ def find_leads(messages: List[Dict], client: OpenAI, model: str, prompt_template
 
 def main():
     parser = argparse.ArgumentParser(description='Поиск потенциальных лидов в сообщениях')
-    parser.add_argument('--json', default='messages.json')
-    parser.add_argument('--n', type=int, default=10)
+    parser.add_argument('-o', '--output', default='messages.json')
+    parser.add_argument('-n', '--n', type=int, default=10)
     parser.add_argument('--leads', default='leads_only.json')
     parser.add_argument('--model', default='')
     args = parser.parse_args()

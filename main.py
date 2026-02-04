@@ -241,6 +241,7 @@ if __name__ == "__main__":
         print(f"Модель: {ai_model}\n")
 
         all_leads = lead.find_leads(results, client, ai_model, prompt_template, args.lead)
+        all_leads.sort(key=lambda p: datetime.strptime(p["date"], "%d.%m.%Y %H:%M"), reverse=True)
 
         with open(filename, 'w', encoding='utf-8') as f:
             json.dump(all_leads, f, ensure_ascii=False, indent=2)
