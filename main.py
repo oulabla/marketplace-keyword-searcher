@@ -14,7 +14,6 @@ from openai import OpenAI
 TOKEN_FILE = "vk_token.txt"
 MAX_GROUPS = 2
 POSTS_PER_GROUPS = 1
-# KEYWORDS = ['битрикс', 'bitrix', '1с-битрикс', '1c-bitrix', 'битрикс24', 'bitrix24', 'б24']
 
 def get_token(show_text=True):
     if os.path.exists(TOKEN_FILE):
