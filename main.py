@@ -89,8 +89,6 @@ def global_search_in_communities(vk, keywords, max_groups=MAX_GROUPS, posts_per_
 
     all_found.sort(key=lambda p: datetime.strptime(p["date"], "%d.%m.%Y %H:%M"), reverse=True)
 
-
-
     return all_found
 
 
@@ -204,7 +202,7 @@ if __name__ == "__main__":
         print(f"Ключевые слова: {', '.join(keywords)}")
         print(f"Групп на слово: {args.max_groups} | Постов в группе: {args.posts_per_group}\n")
 
-    filename = 'bitrix_vk_search_results.json'
+    filename = 'results.json'
     if len(args.output) > 0:
         filename = args.output
 
