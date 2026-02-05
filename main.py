@@ -14,6 +14,8 @@ from openai import OpenAI
 TOKEN_FILE = "vk_token.txt"
 MAX_GROUPS = 2
 POSTS_PER_GROUPS = 1
+DEFAULT_INTERMEDIATE_FILENAME = "vk_result.json"
+
 
 def get_token(show_text=True):
     if os.path.exists(TOKEN_FILE):
@@ -36,6 +38,7 @@ def get_token(show_text=True):
         print(f"Токен сохранён в {TOKEN_FILE}")
 
     return token
+
 
 def search_groups(vk, query, count=100):
     """Поиск сообществ по ключевому слову"""
@@ -160,6 +163,12 @@ def parse_args():
         help="Путь к файлу для сохранения результата (UTF-8 JSON)"
     )
 
+    parser.add_argument(
+        '-i', '--intermediate',
+        default='vk_result.json',
+        help="Путь к файлу для сохранения промежуточного результата до обработки через ChatGPT"
+    )
+
     return parser.parse_args()
 
 if __name__ == "__main__":
@@ -174,6 +183,7 @@ if __name__ == "__main__":
 
       python main.py
       python main.py "битрикс,bitrix,1с-битрикс,битрикс24,б24"
+      python main.py "битрикс,bitrix,1с-битрикс,битрикс24,б24" -g 10 -p 20 -a 30 -i vk_result.json -o result.json
       python main.py крипта,btc,bitcoin -g 10 -p 20
       python main.py --help
 
@@ -187,7 +197,8 @@ if __name__ == "__main__":
       -j, --json            Только JSON в вывод
       -h, --help            Показать эту справку
       -o, --output          Задать имя файла для сохранения
-      -a, --ai              Фильтровать промтном через ChatGPT 
+      -a, --ai              Фильтровать промтом через ChatGPT 
+      -i, --intermediate    Путь к файлу для сохранения промежуточного результата до обработки через ChatGPT
     """)
         sys.exit(0)
 
@@ -220,6 +231,13 @@ if __name__ == "__main__":
 
     if args.ai > 0:
         print_human_readable(results)
+        # Сохраняем временный результат выгрузки из vk
+        vk_result_filename = DEFAULT_INTERMEDIATE_FILENAME
+        if args.intermediate:
+            vk_result_filename = args.intermediate
+
+        with open(vk_result_filename, 'w', encoding='utf-8') as f:
+            json.dump(results, f, ensure_ascii=False, indent=2)
 
         api_key, ai_model = lead.get_gpt_cred()
         if not api_key:

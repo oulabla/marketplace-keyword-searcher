@@ -9,7 +9,7 @@ from typing import List, Dict, Tuple
 from openai import OpenAI
 
 
-PROMPT_FILENAME = 'prompt_example.txt'
+PROMPT_FILENAME = 'prompt.txt'
 GPT_CRED_FILENAME = 'gpt_cred.yaml'
 
 
@@ -112,8 +112,25 @@ def find_leads(messages: List[Dict], client: OpenAI, model: str, prompt_template
             response = client.chat.completions.create(
                 model=model,
                 messages=[
-                    {"role": "system", "content": "Отвечай только валидным JSON-массивом."},
-                    {"role": "user", "content": full_prompt}
+                    {
+                        "role": "system",
+                        "content": "Отвечай только валидным JSON-массивом."
+                    },
+                    {"role": "user", "content":
+                        full_prompt + """
+                        Оставь только сообщения содержащие лиды
+  Ответь СТРОГО в формате JSON:
+  [{
+    "confidence": 85,
+    "reason": "краткое объяснение",
+    "key_indicators": ["спрашивает цену", "хочет купить"],
+    "date": "оригинальная дата",
+    "text": "оригинальный текст из сообщения", 
+    "link": "оригинальный link из сообщения", 
+  }...]
+  
+                        """
+                     }
                 ]
             )
 
