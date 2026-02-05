@@ -158,6 +158,7 @@ def parse_args():
 
     parser.add_argument(
         '-o', '--output',
+        default='result.json',
         help="Путь к файлу для сохранения результата (UTF-8 JSON)"
     )
 
@@ -219,12 +220,10 @@ if __name__ == "__main__":
         show_text=args.json is False
     )
 
-    if args.lead > 0:
+    if args.ai > 0:
         print_human_readable(results)
 
-        cred = lead.load_yaml('gpt_cred.yaml')
-        api_key = cred.get('api_key') or cred.get('openai', {}).get('api_key')
-        ai_model = cred.get('model')
+        api_key, ai_model = lead.get_gpt_cred()
         if not api_key:
             raise ValueError("API ключ не найден")
         if not ai_model:
@@ -232,14 +231,14 @@ if __name__ == "__main__":
 
         client = OpenAI(api_key=api_key)
 
-        prompt_template = lead.load_yaml('prompt.yaml').get('prompt')
+        prompt_template = lead.get_prompt_text()
         if not prompt_template:
             raise ValueError("Промпт не найден")
 
-        print(f"Загружено {len(results)} сообщений. Батч размером {args.lead}")
+        print(f"Загружено {len(results)} сообщений. Батч размером {args.ai}")
         print(f"Модель: {ai_model}\n")
 
-        all_leads = lead.find_leads(results, client, ai_model, prompt_template, args.lead)
+        all_leads = lead.find_leads(results, client, ai_model, prompt_template, args.ai)
         all_leads.sort(key=lambda p: datetime.strptime(p["date"], "%d.%m.%Y %H:%M"), reverse=True)
 
         with open(filename, 'w', encoding='utf-8') as f:
@@ -251,7 +250,7 @@ if __name__ == "__main__":
         json.dump(results, sys.stdout, ensure_ascii=False, indent=2)
         # Сохраняем в файл для удобства
         with open(filename, 'w', encoding='utf-8') as f:
-            json.dump(all_found, f, ensure_ascii=False, indent=2)
+            json.dump(results, f, ensure_ascii=False, indent=2)
     else:
         # Человеческий вывод
         print(f"Ключевые слова: {', '.join(keywords)}")
@@ -259,4 +258,4 @@ if __name__ == "__main__":
         print_human_readable(results)
         # Сохраняем в файл для удобства
         with open(filename, 'w', encoding='utf-8') as f:
-            json.dump(all_found, f, ensure_ascii=False, indent=2)
+            json.dump(results, f, ensure_ascii=False, indent=2)

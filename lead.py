@@ -1,16 +1,75 @@
 import json
+import os
+import sys
 import yaml
 import time
 import argparse
 from itertools import islice
-from typing import List, Dict
+from typing import List, Dict, Tuple
 from openai import OpenAI
 
 
-def load_yaml(file_path: str) -> Dict:
-    with open(file_path, 'r', encoding='utf-8') as f:
-        return yaml.safe_load(f)
+PROMPT_FILENAME = 'prompt_example.txt'
+GPT_CRED_FILENAME = 'gpt_cred.yaml'
 
+
+def get_gpt_cred() -> Tuple[str, str]:
+    if os.path.exists(GPT_CRED_FILENAME):
+        with open(GPT_CRED_FILENAME, "r", encoding="utf-8") as f:
+            cred = yaml.safe_load(f)
+
+        api_key = cred.get('api_key')
+        model = cred.get('model')
+        if len(api_key) > 0 and len(model) > 0:
+           print(f"Токен загружен из файла {GPT_CRED_FILENAME}")
+        return api_key, model
+
+    api_key = input("Введите API KEY для ChatGPT: ").strip()
+    if not api_key:
+        print("API KEY не может быть пустым")
+        sys.exit(1)
+
+    model = input("Введите модель по умолчанию для ChatGPT: ").strip()
+    if not model:
+        print("Будет использована gpt-5-mini")
+        model = 'gpt-5-mini'
+
+    save = input("Сохранить в файл для следующих запусков? (y/n): ").lower()
+    if save in ('y', 'yes'):
+        with open(GPT_CRED_FILENAME, "w", encoding="utf-8") as f:
+            yaml.dump({
+                "api_key": api_key,
+                "model": model,
+            }, f, default_flow_style=False)
+        print(f"Данные для работы с ChatGPT сохранёны в {GPT_CRED_FILENAME}")
+
+    return api_key, model
+
+
+def get_prompt_text() -> str:
+    if os.path.exists(PROMPT_FILENAME):
+        with open(PROMPT_FILENAME, "r", encoding="utf-8") as f:
+            prompt = f.read().strip()
+        if prompt:
+            return prompt
+
+    print("Введите текст и нажмите Ctrl+D (Linux/Mac) или Ctrl+Z+Enter (Windows):")
+    prompt = sys.stdin.read()
+    print("промпт принят")
+    prompt = prompt.strip('\x1A')
+    prompt = prompt.strip()
+
+    if not prompt:
+        print("Промпт не может быть пустым")
+        sys.exit(1)
+
+    save = input("Сохранить промпт в файл для следующих запусков? (y/n): ").lower()
+    if save in ('y', 'yes'):
+        with open(PROMPT_FILENAME, "w", encoding="utf-8") as f:
+            f.write(prompt)
+        print(f"Промпт сохранён в {PROMPT_FILENAME}")
+
+    return prompt
 
 def batched(iterable: List, n: int):
     it = iter(iterable)
@@ -90,10 +149,7 @@ def main():
     parser.add_argument('--model', default='')
     args = parser.parse_args()
 
-    cred = load_yaml('gpt_cred.yaml')
-    api_key = cred.get('api_key') or cred.get('openai', {}).get('api_key')
-    ai_model = args.model or cred.get('model')
-
+    api_key, ai_model = get_gpt_cred()
     if not api_key:
         raise ValueError("API ключ не найден")
     if not ai_model:
@@ -101,11 +157,13 @@ def main():
 
     client = OpenAI(api_key=api_key)
 
-    prompt_template = load_yaml('prompt.yaml').get('prompt')
+    prompt_template = get_prompt_text()
     if not prompt_template:
         raise ValueError("Промпт не найден")
 
-    with open(args.json, 'r', encoding='utf-8') as f:
+    filename = args.output
+
+    with open(filename, 'r', encoding='utf-8') as f:
         messages: List[Dict] = json.load(f)
 
     print(f"Загружено {len(messages)} сообщений. Батч размером {args.n}")
@@ -118,7 +176,6 @@ def main():
 
     print(f"\nГотово. Найдено лидов: {len(all_leads)}")
     print(f"Файл лидов: {args.leads}")
-
 
 if __name__ == "__main__":
     main()
