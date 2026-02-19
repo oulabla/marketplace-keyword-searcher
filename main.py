@@ -171,6 +171,14 @@ def parse_args():
 
     return parser.parse_args()
 
+def safe_date_key(item):
+    if item["date"] is None:
+        # Используем минимальную дату, чтобы None оказались в начале (если reverse=False)
+        # или максимальную, чтобы оказались в конце (если reverse=True)
+        return datetime.min  # для reverse=True они будут в конце
+    return datetime.strptime(item["date"], "%d.%m.%Y %H:%M")
+
+
 if __name__ == "__main__":
     args = parse_args()
 
@@ -255,7 +263,7 @@ if __name__ == "__main__":
         print(f"Модель: {ai_model}\n")
 
         all_leads = lead.find_leads(results, client, ai_model, prompt_template, args.ai)
-        all_leads.sort(key=lambda p: datetime.strptime(p["date"], "%d.%m.%Y %H:%M"), reverse=True)
+        all_leads.sort(key=safe_date_key, reverse=True)
 
         with open(filename, 'w', encoding='utf-8') as f:
             json.dump(all_leads, f, ensure_ascii=False, indent=2)
