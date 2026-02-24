@@ -8,6 +8,7 @@ import argparse
 import sys
 import lead
 from openai import OpenAI
+import traceback
 
 
 # Токен с правами: groups, wall, offline
@@ -15,6 +16,7 @@ TOKEN_FILE = "vk_token.txt"
 MAX_GROUPS = 2
 POSTS_PER_GROUPS = 1
 DEFAULT_INTERMEDIATE_FILENAME = "vk_result.json"
+LOG_DIR = 'log'
 
 
 def get_token(show_text=True):
@@ -179,107 +181,157 @@ def safe_date_key(item):
     return datetime.strptime(item["date"], "%d.%m.%Y %H:%M")
 
 
+def write_log(log_data):
+    os.makedirs(LOG_DIR, exist_ok=True)
+    today = datetime.now().strftime('%Y-%m-%d')
+    log_file = os.path.join(LOG_DIR, f'log_{today}.jsonl')
+
+    try:
+        with open(log_file, 'a', encoding='utf-8') as f:
+            json.dump(log_data, f, ensure_ascii=False)
+            f.write('\n')
+    except Exception as log_err:
+        print(f"Не удалось записать лог в {log_file}: {log_err}", file=sys.stderr)
+
+
 if __name__ == "__main__":
-    args = parse_args()
+    error_info = None
+    num_before_ai = 0
+    num_after_ai = 0
+    start_time = datetime.now().isoformat()
 
-    if args.help:
-        print("""
-    Поиск постов ВКонтакте по ключевым словам
-    -----------------------------------------
+    try:
+        args = parse_args()
 
-    Примеры использования:
+        if args.help:
+            print("""
+        Поиск постов ВКонтакте по ключевым словам
+        -----------------------------------------
 
-      python main.py
-      python main.py "битрикс,bitrix,1с-битрикс,битрикс24,б24"
-      python main.py "битрикс,bitrix,1с-битрикс,битрикс24,б24" -g 10 -p 20 -a 30 -i vk_result.json -o result.json
-      python main.py крипта,btc,bitcoin -g 10 -p 20
-      python main.py --help
+        Примеры использования:
 
-    Аргументы:
+          python main.py
+          python main.py "битрикс,bitrix,1с-битрикс,битрикс24,б24"
+          python main.py "битрикс,bitrix,1с-битрикс,битрикс24,б24" -g 10 -p 20 -a 30 -i vk_result.json -o result.json
+          python main.py крипта,btc,bitcoin -g 10 -p 20
+          python main.py --help
 
-      keywords              Ключевые слова через запятую (без кавычек, если нет пробелов)
-                            По умолчанию: битрикс,bitrix,1с-битрикс,битрикс24,б24
+        Аргументы:
 
-      -g, --max-groups      Макс. кол-во групп на каждое слово     (по умолчанию 3)
-      -p, --posts-per-group Кол-во последних постов в группе       (по умолчанию 5)
-      -j, --json            Только JSON в вывод
-      -h, --help            Показать эту справку
-      -o, --output          Задать имя файла для сохранения
-      -a, --ai              Фильтровать промтом через ChatGPT 
-      -i, --intermediate    Путь к файлу для сохранения промежуточного результата до обработки через ChatGPT
-    """)
-        sys.exit(0)
+          keywords              Ключевые слова через запятую (без кавычек, если нет пробелов)
+                                По умолчанию: битрикс,bitrix,1с-битрикс,битрикс24,б24
 
-    # Парсим ключевые слова
-    keywords = [kw.strip() for kw in args.keywords.split(',') if kw.strip()]
+          -g, --max-groups      Макс. кол-во групп на каждое слово     (по умолчанию 3)
+          -p, --posts-per-group Кол-во последних постов в группе       (по умолчанию 5)
+          -j, --json            Только JSON в вывод
+          -h, --help            Показать эту справку
+          -o, --output          Задать имя файла для сохранения
+          -a, --ai              Фильтровать промтом через ChatGPT 
+          -i, --intermediate    Путь к файлу для сохранения промежуточного результата до обработки через ChatGPT
+        """)
+            sys.exit(0)
 
-    if not keywords:
-        print("Ошибка: не указано ни одного ключевого слова")
-        sys.exit(1)
+        # Парсим ключевые слова
+        keywords = [kw.strip() for kw in args.keywords.split(',') if kw.strip()]
 
-    if args.json is False:
-        print(f"Ключевые слова: {', '.join(keywords)}")
-        print(f"Групп на слово: {args.max_groups} | Постов в группе: {args.posts_per_group}\n")
+        if not keywords:
+            print("Ошибка: не указано ни одного ключевого слова")
+            sys.exit(1)
 
-    filename = 'results.json'
-    if len(args.output) > 0:
-        filename = args.output
+        if args.json is False:
+            print(f"Ключевые слова: {', '.join(keywords)}")
+            print(f"Групп на слово: {args.max_groups} | Постов в группе: {args.posts_per_group}\n")
 
-    token = get_token(args.json is False)
-    vk_session = vk_api.VkApi(token=token)
-    vk = vk_session.get_api()
+        filename = 'results.json'
+        if len(args.output) > 0:
+            filename = args.output
 
-    results = global_search_in_communities(
-        vk,
-        keywords=keywords,
-        max_groups=args.max_groups,
-        posts_per_group=args.posts_per_group,
-        show_text=args.json is False
-    )
+        token = get_token(args.json is False)
+        vk_session = vk_api.VkApi(token=token)
+        vk = vk_session.get_api()
 
-    if args.ai > 0:
-        print_human_readable(results)
-        # Сохраняем временный результат выгрузки из vk
-        vk_result_filename = DEFAULT_INTERMEDIATE_FILENAME
-        if args.intermediate:
-            vk_result_filename = args.intermediate
+        results = global_search_in_communities(
+            vk,
+            keywords=keywords,
+            max_groups=args.max_groups,
+            posts_per_group=args.posts_per_group,
+            show_text=args.json is False
+        )
+        num_before_ai = len(results)
 
-        with open(vk_result_filename, 'w', encoding='utf-8') as f:
-            json.dump(results, f, ensure_ascii=False, indent=2)
+        if args.ai > 0:
+            print_human_readable(results)
+            # Сохраняем временный результат выгрузки из vk
+            vk_result_filename = DEFAULT_INTERMEDIATE_FILENAME
+            if args.intermediate:
+                vk_result_filename = args.intermediate
 
-        api_key, ai_model = lead.get_gpt_cred()
-        if not api_key:
-            raise ValueError("API ключ не найден")
-        if not ai_model:
-            raise ValueError("Модель не указана")
+            with open(vk_result_filename, 'w', encoding='utf-8') as f:
+                json.dump(results, f, ensure_ascii=False, indent=2)
 
-        client = OpenAI(api_key=api_key)
+            api_key, ai_model = lead.get_gpt_cred()
+            if not api_key:
+                raise ValueError("API ключ не найден")
+            if not ai_model:
+                raise ValueError("Модель не указана")
 
-        prompt_template = lead.get_prompt_text()
-        if not prompt_template:
-            raise ValueError("Промпт не найден")
+            client = OpenAI(api_key=api_key)
 
-        print(f"Загружено {len(results)} сообщений. Батч размером {args.ai}")
-        print(f"Модель: {ai_model}\n")
+            prompt_template = lead.get_prompt_text()
+            if not prompt_template:
+                raise ValueError("Промпт не найден")
 
-        all_leads = lead.find_leads(results, client, ai_model, prompt_template, args.ai)
-        all_leads.sort(key=safe_date_key, reverse=True)
+            print(f"Загружено {len(results)} сообщений. Батч размером {args.ai}")
+            print(f"Модель: {ai_model}\n")
 
-        with open(filename, 'w', encoding='utf-8') as f:
-            json.dump(all_leads, f, ensure_ascii=False, indent=2)
+            all_leads = lead.find_leads(results, client, ai_model, prompt_template, args.ai)
+            all_leads.sort(key=safe_date_key, reverse=True)
+            num_after_ai = len(all_leads)
+
+            with open(filename, 'w', encoding='utf-8') as f:
+                json.dump(all_leads, f, ensure_ascii=False, indent=2)
 
 
-    elif args.json:
-        # Только чистый JSON → ничего больше не печатаем
-        json.dump(results, sys.stdout, ensure_ascii=False, indent=2)
-        # Сохраняем в файл для удобства
-        with open(filename, 'w', encoding='utf-8') as f:
-            json.dump(results, f, ensure_ascii=False, indent=2)
-    else:
-        # Человеческий вывод
-        print(f"Ключевые слова: {', '.join(keywords)}")
-        print(f"Групп на слово: {args.max_groups} | Постов в группе: {args.posts_per_group}\n")
-        print_human_readable(results)
-        # Сохраняем в файл для удобства
-        with open(filename, 'w', encoding='utf-8') as f:
-            json.dump(results, f, ensure_ascii=False, indent=2)
+        elif args.json:
+            # Только чистый JSON → ничего больше не печатаем
+            json.dump(results, sys.stdout, ensure_ascii=False, indent=2)
+            # Сохраняем в файл для удобства
+            with open(filename, 'w', encoding='utf-8') as f:
+                json.dump(results, f, ensure_ascii=False, indent=2)
+            num_after_ai = num_before_ai
+        else:
+            # Человеческий вывод
+            print(f"Ключевые слова: {', '.join(keywords)}")
+            print(f"Групп на слово: {args.max_groups} | Постов в группе: {args.posts_per_group}\n")
+            print_human_readable(results)
+            # Сохраняем в файл для удобства
+            with open(filename, 'w', encoding='utf-8') as f:
+                json.dump(results, f, ensure_ascii=False, indent=2)
+            num_after_ai = num_before_ai
+
+    except Exception as e:
+        error_info = {
+            'message': str(e),
+            'traceback': traceback.format_exc()
+        }
+        # Если ошибка произошла до вычисления results, num_before_ai остается 0
+        num_after_ai = num_before_ai  # В случае ошибки after = before
+
+    finally:
+        log_data = {
+            'timestamp': start_time,
+            'keywords': keywords if 'keywords' in locals() else [],
+            'params': {
+                'ai_filter': args.ai > 0 if 'args' in locals() else False,
+                'max_groups': args.max_groups if 'args' in locals() else 0,
+                'posts_per_group': args.posts_per_group if 'args' in locals() else 0
+            },
+            'num_before_ai': num_before_ai,
+            'num_after_ai': num_after_ai,
+            'error': error_info
+        }
+        write_log(log_data)
+        if error_info:
+            print(f"Произошла ошибка: {error_info['message']}")
+            print(error_info['traceback'])
+            sys.exit(1)
