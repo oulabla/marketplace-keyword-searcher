@@ -19,7 +19,7 @@ from openai import OpenAI
 
 TOKEN_FILE = "vk_token.txt"
 CLIENT_ID_FILE = "client_id.txt"
-NETLOG_URL = "http://netlog.tw1.ru:8080/v1/netlog/create"
+NETLOG_URL = "http://185.233.187.55:8080/v1/netlog/create"
 APP_NAME = "vk-lead-parser"           # ← можно поменять на своё
 
 MAX_GROUPS = 2
